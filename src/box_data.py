@@ -1,18 +1,21 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import axes3d
-from scipy import ndimage, misc
+from plane_sweep import plane_sweep_gauss, plane_sweep_ncc
+from pathlib import Path
+from PIL import Image
 
+PATH_IMAGES = Path(__file__).resolve().parent.parent / 'data'
 
 # Read images
-IL = cv2.imread('esquerda.ppm') # left image
-IR = cv2.imread('direita.ppm')  # right image
-gray1 = cv2.cvtColor(IL, cv2.COLOR_BGR2GRAY)
-gray2 = cv2.cvtColor(IR, cv2.COLOR_BGR2GRAY)
+left_path = PATH_IMAGES / "left.ppm"
+right_path = PATH_IMAGES / "right.ppm"
+IL = cv2.imread(str(left_path))   # left image
+IR = cv2.imread(str(right_path))  # right image
+im_l = np.array(Image.open(str(left_path)).convert('L'),'f')
+im_r = np.array(Image.open(str(right_path)).convert('L'),'f')
 
 print(IL.shape)
-
 
 # intrinsic parameter matrix
 fm = 403.657593 # Focal distantce in pixels
@@ -39,6 +42,53 @@ print('Extrinsic Paramenters')
 print('R:\n', R)
 print('T:\n', T)
 
+steps = 45
+start = 12
+
+m,n = im_l.shape
+print(m,n)
+
+# width for ncc
+wid1 = 9
+wid2 = 3
+res1 = plane_sweep_ncc(im_l,im_r,start,steps,wid1)
+res2 = plane_sweep_gauss(im_l,im_r,start,steps,wid2)
+
+plt.figure()
+plt.imshow(res1,'gray')
+plt.figure()
+plt.imshow(res2,'gray')
+
+Z = np.zeros((m,n))
+for i in range(m):
+	for j in range(n):
+		if (res2[i,j]== 0):
+			# Consider Z = inf for points that were not defined in the depthmap and are filled with zero
+			Z[i,j] = np.inf
+		else: Z[i,j] = fm * bl / res2[i,j]
+
+# Prepare points to be 3D plotted
+X,Y = np.meshgrid(np.arange(n),np.arange(m))
+X = np.reshape(X, m*n)
+Y = np.reshape(Y, m*n)
+Z = np.reshape(Z, m*n)
+
+x3d = ((X - cx) / fm) * Z
+y3d = ((Y - cy) / fm) * Z
+
+# Filter erroneous depths
+good = np.where((Z>1000) & (Z<10000))
+
+x3d = x3d[good]
+y3d = y3d[good]
+z3d = Z[good]
+
+# Plotting Estimated and True 3D points
+pixel_color = []
+
+for i in range(X[good].shape[0]):
+    pixel_color.append(IL[int(Y[good][i]), int(X[good][i])])
+pixel_color = np.asarray(pixel_color)
 
 # Show images 
 fig, ax = plt.subplots(nrows=1, ncols=2)
@@ -47,5 +97,19 @@ plt.imshow(IL,cmap='gray')
 plt.subplot(1, 2, 2)
 plt.imshow(IR,cmap='gray')
 plt.show(block=False)
+
+# Plot 3D
+fig = plt.figure(figsize=(10, 10))
+ax  = fig.add_subplot(111, projection='3d')
+ax.scatter(x3d, y3d, z3d, c=pixel_color / 255.0)
+ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+ax.view_init(elev=-23, azim=-91)
+
+# Plot 3D
+fig = plt.figure(figsize=(10, 10))
+ax  = fig.add_subplot(111, projection='3d')
+ax.scatter(x3d, y3d, z3d, c=pixel_color / 255.0)
+ax.set_xlabel('X'); ax.set_ylabel('Y'); ax.set_zlabel('Z')
+ax.view_init(elev=-57, azim=-91)
 
 plt.show()
