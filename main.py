@@ -1,8 +1,7 @@
-import os
+from src.box_data import run
 
 def main():
-    PATH_IMAGES = os.path.join(os.path.dirname(__file__), 'data')
-    print(PATH_IMAGES)
+    run()
 
 if __name__ == "__main__":
     main()
